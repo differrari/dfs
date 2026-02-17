@@ -1,0 +1,25 @@
+@includeC("redbuild.h")
+
+int main {
+    rebuild_self();
+    defer emit_compile_commands();
+    
+    new_module("mail");
+    set_name("mail");
+    
+    set_target(target_native);
+    set_package_type(package_bin);
+    
+    debug();
+    
+    add_local_dependency("/usr/include/fuse3", "`pkg-config fuse3 --cflags --libs`", 0, 0);
+    source("mail.c");
+    source("main.c");
+    
+    if (compile()){
+        gen_compile_commands(0);
+        run();
+    }
+    
+    return 1;
+}

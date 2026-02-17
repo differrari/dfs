@@ -1,0 +1,14 @@
+fs_entry(path, backing type, fs type, stat function, read func, write function, children)
+
+make fs_entry_mod = backing type, fs type, stat function, read func, write function
+
+read/write functions (buf, size, offset, args)
+
+definition of a module:
+    fs_entry("/new",virtual, file, new_stat, make_new_id,0,0),
+    fs_entry("/:id",physical, dir, id_stat, list_projects, 0, {
+      fs_entry("/cmd",virtual, file, 0, cmd_stat, compile_command, 0)
+      fs_entry("/status",virtual, file, stat_stat, check_compile_process, 0,0)
+      fs_entry(":content", physical, dir, content_stat, list_contents, write_contents, 0)
+      fs_entry("/output",virtual, file, out_stat, read_output, 0,0 )
+    }

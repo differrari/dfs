@@ -1,0 +1,16 @@
+/mail <- explicit networking
+/compile <- prefer local
+
+REDACTED
+mail:
+    explicitly route all calls to /mail to /shared/mail
+
+compile:
+    look for /compile module, if found, it'll handle it
+    if not found, route to /shared/compile
+    
+LINUX
+mail:
+    explicitly route all calls to ~/mail to ~/redacted
+compile:
+    
