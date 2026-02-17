@@ -44,10 +44,10 @@ bool root_stat(const char *path, fs_stat *stat){
 fuse_fill_dir_t temp_filler;
 
 size_t list_root(const char *path, void* buf, size_t size, file_offset* off){
-    temp_filler(buf, ".", NULL, 0, 0);
 	temp_filler(buf, "..", NULL, 0, 0);
-	temp_filler(buf, "in", NULL, 0, 0);
-	temp_filler(buf, "out", NULL, 0, 0);
+    for (int i = 0; i < entry_count; i++){
+	    temp_filler(buf, strlen(entries[i].name) ? entries[i].name : ".", NULL, 0, 0);
+	}
 	return 0;
 }
 
