@@ -1,4 +1,4 @@
-#include "fs.h"
+#include "files/system_module.h"
 #include "string/string.h"
 #include "files/buffer.h"
 #include "syscalls/syscalls.h"
@@ -84,14 +84,13 @@ size_t out_read(const char *path, void* buf, size_t size, file_offset* off){
 
 size_t out_write(const char *path, const void* buf, size_t size){
     size_t amount = buffer_write_lim(&out_buffer, buf, size);
-    print("Write %i",amount);
     return amount;
 }
 
 bool mail_getstat(const char *path, fs_stat *stat){
     fs_entry entry = eval_entry(path);
     if (!entry.entry_type){ print("No file %s",path); return false;}
-    if (entry.stat_func){ print("Stat"); return entry.stat_func(path, stat); }
+    if (entry.stat_func){ return entry.stat_func(path, stat); }
     return false;
 }
 
@@ -117,3 +116,14 @@ bool load_mail(){
 	make_entry("out", backing_virtual, entry_directory, out_stat, out_read, out_write);
     return true;
 }
+
+system_module mail_module = {
+    .name = "mail",
+    .mount = "/mail",
+    .init = load_mail,
+    .readdir = mail_sread,
+    .sread = mail_sread,
+    .swrite = mail_swrite,
+    .get_stat = mail_getstat,
+    .version = VERSION_NUM(0, 1, 0, 0),
+};

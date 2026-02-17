@@ -11,9 +11,8 @@
 #include <unistd.h>
 #include "memory.h"
 #include "mail.h"
+#include "files/system_module.h"
 
-#define OPTION(t, p)                           \
-    { t, offsetof(struct options, p), 1 }
 static const struct fuse_opt option_spec[] = {
 	FUSE_OPT_END
 };
@@ -37,7 +36,7 @@ static int service_getattr(const char *path, struct stat *stbuf,
 	
 	if (strlen(path) < 1) return false;
 	fs_stat stat = {};
-	mail_getstat(path+1, &stat);
+	if (mail_module.get_stat) mail_module.get_stat(path+1, &stat);
 	
 	if (stat.type == entry_invalid) return -ENOENT;
 	
@@ -54,12 +53,13 @@ static int service_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 			 off_t offset, struct fuse_file_info *fi,
 			 enum fuse_readdir_flags flags)
 {
+    if (!mail_module.sread) return 0;
 	if (strcmp(path, "/") != 0)
 		return -ENOENT;
 
 	temp_filler = filler;
 	u64 off = offset;
-	return mail_sread(path+1, buf, 0, &off);
+	return mail_module.sread(path+1, buf, 0, &off);
 }
 
 static int service_open(const char *path, struct fuse_file_info *fi)
@@ -72,12 +72,14 @@ int id = 0;
 static int service_read(const char *path, char *buf, size_t size, off_t offset,
 		      struct fuse_file_info *fi)
 {
+    if (!mail_module.sread) return 0;
     u64 off = offset;
-	return mail_sread(path+1, buf, size, &off);
+	return mail_module.sread(path+1, buf, size, &off);
 }
 
 int service_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
-    return mail_swrite(path+1, buf, size);
+    if (!mail_module.swrite) return 0;
+    return mail_module.swrite(path+1, buf, size);
 }
 
 static const struct fuse_operations hello_oper = {
@@ -99,7 +101,7 @@ int main(int argc, char *argv[])
 	fuse_opt_add_arg(&args, "/home/di/shared");
 	fuse_opt_add_arg(&args, "-f");
 	
-	load_mail();
+	if (mail_module.init) mail_module.init();
 	
 	int ret = fuse_main(args.argc, args.argv, &hello_oper, NULL);
 	fuse_opt_free_args(&args);
