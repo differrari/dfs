@@ -1,5 +1,4 @@
-#include "files/system_module.h"
-#include "string/string.h"
+#include "system_module.h"
 #include "files/buffer.h"
 #include "syscalls/syscalls.h"
 
@@ -10,7 +9,7 @@ int entry_count = 0;
 buffer in_buffer;
 buffer out_buffer;
 
-static inline bool make_entry(const char *name, fs_backing_type back_type, fs_entry_type ent_type, getstat stat_function, sread read_func, swrite write_func){
+static inline bool make_entry(const char *name, fs_backing_type back_type, fs_entry_type ent_type, getstat stat_function, simple_read_fn read_func, simple_write_fn write_func){
     if (entry_count >= MAX_ENTRIES-1) return false;
     entries[entry_count++] = (fs_entry){
         .name = name,
@@ -77,7 +76,6 @@ bool out_stat(const char *path, fs_stat *stat){
 
 size_t out_read(const char *path, void* buf, size_t size, file_offset* off){
     size_t amount = buffer_read(&out_buffer, buf, size, *off);
-    print("Read %i from %i (expected %i, file size %i)",amount,*off,size,out_buffer.buffer_size);
     *off += amount;
     return amount;
 }
@@ -89,21 +87,21 @@ size_t out_write(const char *path, const void* buf, size_t size){
 
 bool mail_getstat(const char *path, fs_stat *stat){
     fs_entry entry = eval_entry(path);
-    if (!entry.entry_type){ print("No file %s",path); return false;}
+    if (!entry.entry_type) return false;
     if (entry.stat_func){ return entry.stat_func(path, stat); }
     return false;
 }
 
 size_t mail_sread(const char *path, void *buf, size_t size, file_offset *offset){
     fs_entry entry = eval_entry(path);
-    if (!entry.entry_type){ print("No file %s",path);return false;}
+    if (!entry.entry_type) return false;
     if (entry.read_func) return entry.read_func(path, buf, size, offset);
     return false;
 }
 
 size_t mail_swrite(const char *path, const void *buf, size_t size){
     fs_entry entry = eval_entry(path);
-    if (!entry.entry_type){ print("No file %s",path);return false;}
+    if (!entry.entry_type) return false;
     if (entry.write_func) return entry.write_func(path, buf, size);
     return false;
 }
@@ -119,7 +117,7 @@ bool load_mail(){
 
 system_module mail_module = {
     .name = "mail",
-    .mount = "/mail",
+    .mount = "mail",
     .init = load_mail,
     .readdir = mail_sread,
     .sread = mail_sread,

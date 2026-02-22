@@ -2,7 +2,7 @@
 
 int main {
     rebuild_self();
-    defer emit_compile_commands();
+    // defer emit_compile_commands();
     
     new_module("mail");
     set_name("mail");
@@ -15,10 +15,11 @@ int main {
     add_local_dependency("/usr/include/fuse3", "`pkg-config fuse3 --cflags --libs`", 0, 0);
     source("mail.c");
     source("main.c");
+    source("module_loader.c");
     
     if (compile()){
         gen_compile_commands(0);
-        run();
+        return run();
     }
     
     return 1;
