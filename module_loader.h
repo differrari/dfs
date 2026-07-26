@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.h"
-#include "system_module.h"
+#include "files/system_module.h"
 
 bool load_module(system_module *module);
 bool unload_module(system_module *module);

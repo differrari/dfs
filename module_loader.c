@@ -18,7 +18,7 @@ bool load_module(system_module *module){
         print("[FS_MOD error] failed to load module %s due to missing initializer",module->name);
         return false;
     }
-    if (!module->init()){
+    if (!module->init(module)){
         print("[FS_MOD error] failed to load module %s. Initializer failed",module->name);
         return false;
     }
