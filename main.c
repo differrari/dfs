@@ -10,10 +10,13 @@
 #include <stddef.h>
 #include <assert.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include "files/system_module.h"
 #include "module_loader.h"
-// #include "files/stack_fs.h"
+#include "files/helpers.h"
+
+string_slice fallback_dir = SLICE("/home/di/os_repo/projects/code/braincode");
 
 extern int print(const char *fmt, ...);
 
@@ -41,17 +44,38 @@ static int service_getattr(const char *path, struct stat *stbuf,
 	    return 0;
 	}
 
-    fs_stat stat = {};
-    system_module *mod = get_module((char**)&path);
-    if (mod && mod->getstat) mod->getstat(path, &stat);
+    fs_stat stat_s = {};
+	const char *newpath = path;
+    system_module *mod = get_module((char**)&newpath);
+    if (mod && mod->getstat){
+		mod->getstat(newpath, &stat_s);
+	} else {
+		if (strcmp("build", path)){
+			stbuf->st_mode = S_IFREG | 0666;
+			stbuf->st_size = 256;
+			return 0;
+		}
+		string fullpath = string_format("%s%s",fallback_dir.data,path);
+		int ret = stat(fullpath.data, stbuf);
+		string_free(fullpath);
+		return ret;
+	}
     
-    if (stat.type == entry_invalid) return 0;
+    if (stat_s.type == entry_invalid) return 0;
 	
-	stbuf->st_mode = (stat.type == entry_directory ? S_IFDIR : S_IFREG) | 0666;
+	stbuf->st_mode = (stat_s.type == entry_directory ? S_IFDIR : S_IFREG) | 0666;
 	stbuf->st_nlink = 1 + (strlen(path) == 1 && *path == '/');
-	stbuf->st_size = stat.size;
+	stbuf->st_size = stat_s.size;
 
 	return 0;
+}
+
+fuse_fill_dir_t tmp_filler;
+void *tmp_buf = 0;
+
+void traverse_dir_test(const char *directory, const char *file){
+	if (strcmp(file, ".") == 0 || strcmp(file, "..") == 0) return;
+	tmp_filler(tmp_buf, file, NULL, 0, 0);
 }
 
 static int service_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
@@ -62,6 +86,10 @@ static int service_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	    filler(buf, ".", NULL, 0, 0);
 		filler(buf, "..", NULL, 0, 0);
 		filler(buf, "clipboard", NULL, 0, 0);
+		filler(buf, "build", NULL, 0, 0);
+		tmp_filler = filler;
+		tmp_buf = buf;
+		traverse_directory(fallback_dir.data, false, traverse_dir_test);
 		//List contents of modules
 	    return 0;
 	}
@@ -105,8 +133,21 @@ int id = 0;
 static int service_read(const char *path, char *buf, size_t size, off_t offset,
 		      struct fuse_file_info *fi)
 {
+	const char *mpath = path;
     system_module *mod = get_module((char**)&path);
-    if (!mod || !mod->read || !mod->open) return -ENOENT;
+	if (!mod){
+		string fullpath = string_format("%s%s",fallback_dir.data,mpath);
+		FILE *fd = fopen(fullpath.data, "r");
+		string_free(fullpath);
+		if (!fd) return -1;
+		fseek(fd, offset, SEEK_ABSOLUTE);
+		int ret = fread(buf, size, 1, fd);
+		// if (ret != 1) return -1;
+		size_t size = ftell(fd)-offset;
+		fclose(fd);
+		return size;
+	}
+    if (!mod->read || !mod->open) return -ENOENT;
    
     file fd = {};
     FS_RESULT op = mod->open(path, &fd);
@@ -122,9 +163,43 @@ static int service_read(const char *path, char *buf, size_t size, off_t offset,
 	return res;
 }
 
+extern char *realpath(const char *restrict path, char *restrict resolved_path);
+
 int service_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
+	const char *mpath = path;
     system_module *mod = get_module((char**)&path);
-    if (!mod || !mod->write || !mod->open) return -ENOENT;
+	if (!mod){
+		if (strcmp("build", mpath)){
+			string_slice dir = { .data = (char*)buf, .length = size-1};
+			char rpathbuf[256];
+			string path = string_format("%s/%v",fallback_dir.data,dir);
+			size_t wrote = -1;
+			if (realpath(path.data, rpathbuf)){
+				if (strncmp(rpathbuf, fallback_dir.data, fallback_dir.length) == 0){
+					string s = string_format("cd %s && redbuild",rpathbuf);
+					print("%S",s);
+					system(s.data);
+					wrote = size;
+				}
+			}
+			string_free(path);
+			return wrote;
+		}
+		string fullpath = string_format("%s%s",fallback_dir.data,mpath);
+		FILE *fd = fopen(fullpath.data, "rw+");
+		string_free(fullpath);
+		if (!fd) {
+			return -1;
+		}
+		fseek(fd, offset, SEEK_ABSOLUTE);
+		int ret = fwrite(buf, size, 1, fd);
+		fclose(fd);
+		if (ret != 1) {
+			return -1;
+		}
+		return size;
+	}
+	if (!mod->write || !mod->open) return -ENOENT;
    
     file fd = {};
     FS_RESULT op = mod->open(path, &fd);
@@ -140,6 +215,28 @@ int service_write(const char *path, const char *buf, size_t size, off_t offset, 
 	return res;
 }
 
+int service_truncate(const char *path, off_t offset, struct fuse_file_info *fi){
+	const char *mpath = path;
+    system_module *mod = get_module((char**)&path);
+	if (!mod){
+		string fullpath = string_format("%s%s",fallback_dir.data,mpath);
+		FILE *fd = fopen(fullpath.data, "rw+");
+		string_free(fullpath);
+		if (!fd) return -1;
+		ftruncate(fd->_fileno, offset);
+		fclose(fd);
+		return offset;
+	}
+	if (!mod->truncate) return -1;
+
+	file fd = {};
+    FS_RESULT op = mod->open(path, &fd);
+    if (op != FS_RESULT_SUCCESS) return 0;
+
+    fd.size = offset;
+	return mod->truncate(&fd);
+}
+
 const struct fuse_operations dfs_operations = {
 	.init       = service_init,
 	.getattr	= service_getattr,
@@ -147,6 +244,7 @@ const struct fuse_operations dfs_operations = {
 	.open		= service_open,
 	.read		= service_read,
 	.write      = service_write,
+	.truncate 	= service_truncate,
 };
 
 static const struct fuse_opt option_spec[] = {
