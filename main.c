@@ -16,7 +16,9 @@
 #include "module_loader.h"
 #include "files/helpers.h"
 
-string_slice fallback_dir = SLICE("/home/di/os_repo/projects/code/braincode");
+#include "config.h"
+
+string_slice fallback_dir = SLICE(fallback_path_str);
 
 extern int print(const char *fmt, ...);
 
